@@ -8,7 +8,7 @@ LOCAL_UPSTREAM="${DIFFSYNTH_SOURCE:-}"
 
 if [[ "${FORCE_BOOTSTRAP:-0}" == 1 ]]; then rm -rf "${WORK}"; fi
 mkdir -p "${WORK}"
-if [[ -f "${WORK}/.bootstrap-v4-ok" ]]; then
+if [[ -f "${WORK}/.bootstrap-v5-ok" ]]; then
   echo "baseline=${WORK}/baseline"
   echo "baseline_measured=${WORK}/baseline-measured"
   echo "optimized=${WORK}/optimized"
@@ -30,7 +30,7 @@ else
   git -C "${WORK}/upstream" archive "${UPSTREAM_COMMIT}" | tar -x -C "${WORK}/baseline"
 fi
 
-# Reconstruct the uploaded Ref2VA baseline on top of the exact upstream commit.
+# Reconstruct the user's uploaded Ref2VA baseline on the exact pinned upstream.
 cp -a "${ROOT}/baseline/DiffSynth-Studio/." "${WORK}/baseline/"
 
 # Baseline measurement tree = baseline + timing-only instrumentation.
@@ -41,12 +41,22 @@ cp -a "${WORK}/baseline" "${WORK}/baseline-measured"
   patch -s -p1 < "${ROOT}/experiments/baseline_measurement.patch"
 )
 
-# Optimized always derives from the exact same baseline, then overlays only
-# checked-in optimized files.
+# Optimized always starts from exactly the same baseline. Experiment-facing
+# examples/configs are stored as a readable overlay, while the five core runtime
+# changes are applied from the exact verified patch set.
 cp -a "${WORK}/baseline" "${WORK}/optimized"
-cp -a "${ROOT}/optimized/DiffSynth-Studio/." "${WORK}/optimized/"
+if [[ -d "${ROOT}/optimized/DiffSynth-Studio/examples" ]]; then
+  cp -a "${ROOT}/optimized/DiffSynth-Studio/examples/." "${WORK}/optimized/examples/"
+fi
+(
+  cd "${WORK}/optimized"
+  for patch_file in "${ROOT}"/patches/optimized-core/*.patch; do
+    patch --dry-run -s -p1 < "${patch_file}"
+    patch -s -p1 < "${patch_file}"
+  done
+)
 
-touch "${WORK}/.bootstrap-v4-ok"
+touch "${WORK}/.bootstrap-v5-ok"
 echo "baseline=${WORK}/baseline"
 echo "baseline_measured=${WORK}/baseline-measured"
 echo "optimized=${WORK}/optimized"
