@@ -1,0 +1,386 @@
+diff --git a/diffsynth/diffusion/runner.py b/diffsynth/diffusion/runner.py
+index 0e2c921..f6097b2 100644
+--- a/diffsynth/diffusion/runner.py
++++ b/diffsynth/diffusion/runner.py
+@@ -1,19 +1,26 @@
+-import os, json, torch, importlib
+-from tqdm import tqdm
++import contextlib
++import importlib
++import json
++import os
++import time
++
++import torch
+ from accelerate import Accelerator
+-from .training_module import DiffusionTrainingModule
+-from .logger import ModelLogger
++from tqdm import tqdm
++
+ from diffsynth.core import OffloadTrainingManager
+ 
++from .logger import ModelLogger
++from .training_module import DiffusionTrainingModule
++
+ 
+ def get_optimizer_class(customized_optimizer=None):
+     if customized_optimizer is None:
+         return torch.optim.AdamW
+-    else:
+-        module_name, class_name = customized_optimizer.rsplit(".", 1)
+-        module = importlib.import_module(module_name)
+-        print(f"Customized opimizer `{customized_optimizer}` imported.")
+-        return getattr(module, class_name)
++    module_name, class_name = customized_optimizer.rsplit(".", 1)
++    module = importlib.import_module(module_name)
++    print(f"Customized optimizer `{customized_optimizer}` imported.")
++    return getattr(module, class_name)
+ 
+ 
+ def save_training_args(args):
+@@ -23,11 +30,106 @@ def save_training_args(args):
+     try:
+         os.makedirs(args.output_path, exist_ok=True)
+         save_path = os.path.join(args.output_path, "training_args.json")
+-        with open(save_path, "w", encoding="utf-8") as f:
+-            json.dump(vars(args), f, indent=4, ensure_ascii=False, default=str)
++        with open(save_path, "w", encoding="utf-8") as file:
++            json.dump(vars(args), file, indent=4, ensure_ascii=False, default=str)
+         print(f"Training arguments saved to `{save_path}`.")
+-    except Exception as e:
+-        print(f"Warning: failed to save training arguments: {e}")
++    except Exception as error:
++        print(f"Warning: failed to save training arguments: {error}")
++
++
++def single_item_collate(batch):
++    """Preserve the original batch-size-one sample structure.
++
++    A top-level function is picklable under spawn-based DataLoader workers,
++    unlike the original inline lambda.
++    """
++
++    if len(batch) != 1:
++        raise ValueError(f"Expected DataLoader batch size 1, received {len(batch)} items.")
++    return batch[0]
++
++
++def _nvtx_range(enabled, name):
++    if not enabled or not torch.cuda.is_available():
++        return contextlib.nullcontext()
++
++    @contextlib.contextmanager
++    def _range():
++        torch.cuda.nvtx.range_push(name)
++        try:
++            yield
++        finally:
++            torch.cuda.nvtx.range_pop()
++
++    return _range()
++
++
++def _synchronize_for_benchmark(accelerator):
++    accelerator.wait_for_everyone()
++    if torch.cuda.is_available():
++        torch.cuda.synchronize(accelerator.device)
++
++
++def _write_benchmark_report(accelerator, output_path, elapsed, steps):
++    local = torch.tensor(
++        [float(elapsed), float(steps)],
++        dtype=torch.float64,
++        device=accelerator.device,
++    )
++    gathered = accelerator.gather(local).reshape(accelerator.num_processes, 2)
++    if not accelerator.is_main_process:
++        return
++
++    elapsed_values = gathered[:, 0].cpu()
++    measured_steps = int(gathered[0, 1].item())
++    max_elapsed = float(elapsed_values.max().item())
++    report = {
++        "measured_steps_per_rank": measured_steps,
++        "world_size": accelerator.num_processes,
++        "elapsed_seconds_mean_rank": float(elapsed_values.mean().item()),
++        "elapsed_seconds_max_rank": max_elapsed,
++        "steps_per_second": measured_steps / max_elapsed if max_elapsed > 0 else None,
++        "samples_per_second_global": (
++            measured_steps * accelerator.num_processes / max_elapsed
++            if max_elapsed > 0
++            else None
++        ),
++        "measurement_contract": (
++            "One synchronization before and after the complete window; no "
++            "per-phase synchronization is inserted. Includes data wait, forward, "
++            "backward, optimizer, scheduler, zero_grad, and logging for each step."
++        ),
++    }
++    print("H3 benchmark: " + json.dumps(report, ensure_ascii=False, sort_keys=True))
++    if output_path is not None:
++        os.makedirs(output_path, exist_ok=True)
++        report_path = os.path.join(output_path, "benchmark.json")
++        with open(report_path, "w", encoding="utf-8") as file:
++            json.dump(report, file, indent=2, ensure_ascii=False)
++        print(f"Benchmark report saved to `{report_path}`.")
++
++
++def _training_dataloader(dataset, num_workers, args):
++    pin_memory = bool(getattr(args, "dataloader_pin_memory", False))
++    persistent_workers = bool(
++        getattr(args, "dataloader_persistent_workers", False)
++    )
++    prefetch_factor = int(getattr(args, "dataloader_prefetch_factor", 2))
++    if prefetch_factor < 1:
++        raise ValueError("dataloader_prefetch_factor must be at least 1.")
++
++    kwargs = {
++        "dataset": dataset,
++        "shuffle": True,
++        "batch_size": 1,
++        "collate_fn": single_item_collate,
++        "num_workers": num_workers,
++        "pin_memory": pin_memory,
++    }
++    if num_workers > 0:
++        kwargs["persistent_workers"] = persistent_workers
++        kwargs["prefetch_factor"] = prefetch_factor
++    return torch.utils.data.DataLoader(**kwargs)
+ 
+ 
+ def launch_training_task(
+@@ -44,7 +146,7 @@ def launch_training_task(
+     enable_optimizer_cpu_offload: bool = False,
+     cpu_offload_split_threshold: int = None,
+     customized_optimizer: str = None,
+-    args = None,
++    args=None,
+     **kwargs,
+ ):
+     if args is not None:
+@@ -62,37 +164,125 @@ def launch_training_task(
+         save_training_args(args)
+ 
+     optimizer_class = get_optimizer_class(customized_optimizer)
+-    optimizer = optimizer_class(model.trainable_modules(), lr=learning_rate, weight_decay=weight_decay)
++    optimizer = optimizer_class(
++        model.trainable_modules(), lr=learning_rate, weight_decay=weight_decay
++    )
+     scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer)
+-    dataloader = torch.utils.data.DataLoader(dataset, shuffle=True, collate_fn=lambda x: x[0], num_workers=num_workers)
++    dataloader = _training_dataloader(dataset, num_workers, args)
+ 
+     if enable_model_cpu_offload:
+-        optimizer, dataloader, scheduler = accelerator.prepare(optimizer, dataloader, scheduler)
++        optimizer, dataloader, scheduler = accelerator.prepare(
++            optimizer, dataloader, scheduler
++        )
+         model.pipe.device = accelerator.device
+-        offload_manager = OffloadTrainingManager(model, accelerator.device, enable_optimizer_cpu_offload, cpu_offload_split_threshold)
++        offload_manager = OffloadTrainingManager(
++            model,
++            accelerator.device,
++            enable_optimizer_cpu_offload,
++            cpu_offload_split_threshold,
++        )
+     else:
+         model.to(device=accelerator.device)
+-        model, optimizer, dataloader, scheduler = accelerator.prepare(model, optimizer, dataloader, scheduler)
++        model, optimizer, dataloader, scheduler = accelerator.prepare(
++            model, optimizer, dataloader, scheduler
++        )
+ 
+     initialize_deepspeed_gradient_checkpointing(accelerator)
++
++    max_train_steps = getattr(args, "max_train_steps", None)
++    benchmark_warmup_steps = int(getattr(args, "benchmark_warmup_steps", 0))
++    benchmark_steps = int(getattr(args, "benchmark_steps", 0))
++    enable_nvtx = bool(getattr(args, "enable_nvtx", False))
++    profile_cuda_capture = bool(getattr(args, "profile_cuda_capture", False))
++    skip_final_save = bool(getattr(args, "skip_final_save", False))
++    if benchmark_warmup_steps < 0 or benchmark_steps < 0:
++        raise ValueError("benchmark step counts must be non-negative.")
++
++    global_step = 0
++    benchmark_start = None
++    benchmark_reported = False
++    stop_training = False
++
+     for epoch_id in range(num_epochs):
+-        for data in tqdm(dataloader):
+-            with accelerator.accumulate(model):
+-                if dataset.load_from_cache:
+-                    loss = model({}, inputs=data)
+-                else:
+-                    loss = model(data)
+-                accelerator.backward(loss)
+-                if enable_model_cpu_offload:
+-                    offload_manager.after_backward()
+-                optimizer.step()
+-                scheduler.step()
+-                optimizer.zero_grad()
+-                model_logger.on_step_end(accelerator, model, save_steps, loss=loss)
+-        if save_steps is None:
++        data_iterator = iter(dataloader)
++        progress = tqdm(
++            total=len(dataloader),
++            disable=not accelerator.is_local_main_process,
++            desc=f"epoch {epoch_id}",
++        )
++        while True:
++            if max_train_steps is not None and global_step >= max_train_steps:
++                stop_training = True
++                break
++
++            if (
++                benchmark_steps > 0
++                and benchmark_start is None
++                and global_step == benchmark_warmup_steps
++            ):
++                _synchronize_for_benchmark(accelerator)
++                if profile_cuda_capture and torch.cuda.is_available():
++                    torch.cuda.cudart().cudaProfilerStart()
++                benchmark_start = time.perf_counter()
++
++            try:
++                with _nvtx_range(enable_nvtx, "H3/data_wait"):
++                    data = next(data_iterator)
++            except StopIteration:
++                break
++
++            with _nvtx_range(enable_nvtx, "H3/train_step"):
++                with accelerator.accumulate(model):
++                    with _nvtx_range(enable_nvtx, "H3/forward"):
++                        if dataset.load_from_cache:
++                            loss = model({}, inputs=data)
++                        else:
++                            loss = model(data)
++                    with _nvtx_range(enable_nvtx, "H3/backward"):
++                        accelerator.backward(loss)
++                        if enable_model_cpu_offload:
++                            offload_manager.after_backward()
++                    with _nvtx_range(enable_nvtx, "H3/optimizer"):
++                        optimizer.step()
++                        scheduler.step()
++                        optimizer.zero_grad()
++                    with _nvtx_range(enable_nvtx, "H3/logging_checkpoint"):
++                        model_logger.on_step_end(
++                            accelerator, model, save_steps, loss=loss
++                        )
++
++            global_step += 1
++            progress.update(1)
++
++            if (
++                benchmark_start is not None
++                and not benchmark_reported
++                and global_step >= benchmark_warmup_steps + benchmark_steps
++            ):
++                _synchronize_for_benchmark(accelerator)
++                elapsed = time.perf_counter() - benchmark_start
++                if profile_cuda_capture and torch.cuda.is_available():
++                    torch.cuda.cudart().cudaProfilerStop()
++                _write_benchmark_report(
++                    accelerator,
++                    getattr(args, "output_path", None),
++                    elapsed,
++                    benchmark_steps,
++                )
++                benchmark_reported = True
++
++        progress.close()
++        if save_steps is None and not skip_final_save:
+             model_logger.on_epoch_end(accelerator, model, epoch_id)
++        if stop_training:
++            break
+ 
+-    model_logger.on_training_end(accelerator, model, save_steps)
++    model_logger.on_training_end(
++        accelerator,
++        model,
++        save_steps,
++        skip_final_save=skip_final_save,
++    )
+ 
+ 
+ def launch_data_process_task(
+@@ -101,7 +291,7 @@ def launch_data_process_task(
+     model: DiffusionTrainingModule,
+     model_logger: ModelLogger,
+     num_workers: int = 8,
+-    args = None,
++    args=None,
+     **kwargs,
+ ):
+     if args is not None:
+@@ -109,38 +299,60 @@ def launch_data_process_task(
+         enable_model_cpu_offload = args.enable_model_cpu_offload
+         enable_optimizer_cpu_offload = args.enable_optimizer_cpu_offload
+         cpu_offload_split_threshold = args.cpu_offload_split_threshold
+-        
+-    dataloader = torch.utils.data.DataLoader(dataset, shuffle=False, collate_fn=lambda x: x[0], num_workers=num_workers)
++
++    dataloader = torch.utils.data.DataLoader(
++        dataset,
++        shuffle=False,
++        batch_size=1,
++        collate_fn=single_item_collate,
++        num_workers=num_workers,
++    )
+     if enable_model_cpu_offload:
+         dataloader = accelerator.prepare(dataloader)
+-        offload_manager = OffloadTrainingManager(model, accelerator.device, enable_optimizer_cpu_offload, cpu_offload_split_threshold)
++        offload_manager = OffloadTrainingManager(
++            model,
++            accelerator.device,
++            enable_optimizer_cpu_offload,
++            cpu_offload_split_threshold,
++        )
+         model.pipe.device = accelerator.device
+     else:
+         model.to(device=accelerator.device)
+         model, dataloader = accelerator.prepare(model, dataloader)
+-    
+-    for data_id, data in enumerate(tqdm(dataloader)):
++
++    for data_id, data in enumerate(
++        tqdm(dataloader, disable=not accelerator.is_local_main_process)
++    ):
+         with accelerator.accumulate(model):
+             with torch.no_grad():
+-                folder = os.path.join(model_logger.output_path, str(accelerator.process_index))
++                folder = os.path.join(
++                    model_logger.output_path, str(accelerator.process_index)
++                )
+                 os.makedirs(folder, exist_ok=True)
+-                save_path = os.path.join(model_logger.output_path, str(accelerator.process_index), f"{data_id}.pth")
++                save_path = os.path.join(folder, f"{data_id}.pth")
+                 data = model(data)
+                 torch.save(data, save_path)
+                 if enable_model_cpu_offload:
+                     offload_manager.after_backward()
+ 
++
+ def initialize_deepspeed_gradient_checkpointing(accelerator: Accelerator):
+     if getattr(accelerator.state, "deepspeed_plugin", None) is not None:
+         ds_config = accelerator.state.deepspeed_plugin.deepspeed_config
+         if "activation_checkpointing" in ds_config:
+             import deepspeed
++
+             act_config = ds_config["activation_checkpointing"]
+             deepspeed.checkpointing.configure(
+-                mpu_=None, 
++                mpu_=None,
+                 partition_activations=act_config.get("partition_activations", False),
+                 checkpoint_in_cpu=act_config.get("cpu_checkpointing", False),
+-                contiguous_checkpointing=act_config.get("contiguous_memory_optimization", False)
++                contiguous_checkpointing=act_config.get(
++                    "contiguous_memory_optimization", False
++                ),
+             )
+         else:
+-            print("Do not find activation_checkpointing config in deepspeed config, skip initializing deepspeed gradient checkpointing.")
++            print(
++                "Do not find activation_checkpointing config in deepspeed config, "
++                "skip initializing deepspeed gradient checkpointing."
++            )
