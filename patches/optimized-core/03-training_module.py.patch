@@ -1,0 +1,62 @@
+diff --git a/diffsynth/diffusion/training_module.py b/diffsynth/diffusion/training_module.py
+index a3c6143..75f2492 100644
+--- a/diffsynth/diffusion/training_module.py
++++ b/diffsynth/diffusion/training_module.py
+@@ -129,23 +129,48 @@ class DiffusionTrainingModule(torch.nn.Module):
+         return state_dict
+     
+     
+-    def transfer_data_to_device(self, data, device, torch_float_dtype=None):
++    def transfer_data_to_device(
++        self,
++        data,
++        device,
++        torch_float_dtype=None,
++        non_blocking=False,
++    ):
+         if data is None:
+             return data
+         elif isinstance(data, torch.Tensor):
+-            data = data.to(device)
+-            if torch_float_dtype is not None and data.dtype in [torch.float, torch.float16, torch.bfloat16]:
++            # Preserve the baseline operation order (device move, then optional
++            # dtype cast). Only the H2D scheduling becomes non-blocking when the
++            # DataLoader supplied pinned host memory.
++            data = data.to(device=device, non_blocking=non_blocking)
++            if torch_float_dtype is not None and data.dtype in [
++                torch.float,
++                torch.float16,
++                torch.bfloat16,
++            ]:
+                 data = data.to(torch_float_dtype)
+             return data
+         elif isinstance(data, tuple):
+-            data = tuple(self.transfer_data_to_device(x, device, torch_float_dtype) for x in data)
+-            return data
++            return tuple(
++                self.transfer_data_to_device(
++                    x, device, torch_float_dtype, non_blocking=non_blocking
++                )
++                for x in data
++            )
+         elif isinstance(data, list):
+-            data = list(self.transfer_data_to_device(x, device, torch_float_dtype) for x in data)
+-            return data
++            return [
++                self.transfer_data_to_device(
++                    x, device, torch_float_dtype, non_blocking=non_blocking
++                )
++                for x in data
++            ]
+         elif isinstance(data, dict):
+-            data = {i: self.transfer_data_to_device(data[i], device, torch_float_dtype) for i in data}
+-            return data
++            return {
++                key: self.transfer_data_to_device(
++                    value, device, torch_float_dtype, non_blocking=non_blocking
++                )
++                for key, value in data.items()
++            }
+         else:
+             return data
+     
