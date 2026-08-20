@@ -14,13 +14,15 @@ bash run_ab.sh
 
 That single command reconstructs **complete runnable source trees** under `.work/`, launches all requested modes, and writes a speedup table to `results/.../summary.md`.
 
-### How the complete trees are reconstructed
+## Source reconstruction
 
 The uploaded code snapshot was based on `modelscope/DiffSynth-Studio` commit:
 
 `6343deda06b3e09efc9b1ce23c135c35a341d143`
 
-The checked-in `baseline/DiffSynth-Studio/` and `optimized/DiffSynth-Studio/` directories are intentionally **delta overlays**, not standalone copies of the whole upstream repo. `scripts/bootstrap.sh` checks out the pinned upstream commit, overlays the uploaded Ref2VA baseline files, then derives optimized from that exact baseline and overlays only the optimization delta. This guarantees both modes share the same complete dependency closure without storing two 20+MB copies in this repository.
+`baseline/DiffSynth-Studio/` stores the user's Ref2VA delta on top of that pinned upstream commit. `scripts/bootstrap.sh` reconstructs the complete baseline dependency tree from the pinned commit and this delta.
+
+The complete optimized tree is then derived from **that exact baseline**. Experiment-facing dataset/launch/ZeRO files are stored under `optimized/DiffSynth-Studio/examples/`; the five core runtime changes are stored in `patches/optimized-core/` and applied in order. This patch set is the source of truth for the optimized runtime. It avoids storing two full DiffSynth copies while guaranteeing both variants share the same dependency closure.
 
 If a cluster cannot access GitHub, set `DIFFSYNTH_SOURCE` in `config.env` to an existing DiffSynth git checkout containing the pinned commit.
 
@@ -31,7 +33,13 @@ If a cluster cannot access GitHub, set `DIFFSYNTH_SOURCE` in `config.env` to an 
 - `optimized-data`: adds mmap/cache/pinned prefetch/non-blocking H2D.
 - `optimized-zero`: additionally enables the candidate ZeRO-3 overlap config.
 
-All modes keep full Ref2VA/target tokens, attention semantics, loss, trainable parameters, gradient-checkpoint boundary, and optimizer update order unchanged. See `docs/SEMANTIC_CONTRACT.md` and `docs/EXPERIMENTS.md`.
+All modes keep full Ref2VA/target tokens, attention semantics, loss, trainable parameters, gradient-checkpoint boundary, and optimizer update order unchanged.
+
+## Validation
+
+The reconstructed optimized tree has been checked against the previously validated optimized source for all 17 changed paths: all Git blob hashes match. The semantic test suite reports `7 passed`, and a tiny real H3 path (`dataset -> packing -> DiT -> loss -> backward`) is bitwise identical between baseline and optimized.
+
+A real 8-GPU MiniMax-H3 throughput run is intentionally not claimed here because this environment does not contain the H3 weights/latent dataset. Run the A/B command above on the target cluster.
 
 ## Profile the bound
 
@@ -40,3 +48,5 @@ PROFILE_MODE=baseline bash scripts/profile_nsys.sh
 PROFILE_MODE=optimized-core bash scripts/profile_nsys.sh
 bash scripts/run_zero_sweep.sh
 ```
+
+See `docs/SEMANTIC_CONTRACT.md` and `docs/EXPERIMENTS.md` for the measurement contract and experiment interpretation.
