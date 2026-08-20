@@ -1,0 +1,8 @@
+config.env
+.work/
+results/
+models/
+*.nsys-rep
+*.qdrep
+__pycache__/
+*.pyc
