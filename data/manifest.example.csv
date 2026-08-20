@@ -1,0 +1,2 @@
+h3_video_latents,h3_audio_latents,h3_text_emb,h3_status,h3_num_frames,h3_video_latent_t,h3_audio_latent_t
+cache/video/example_video.pt,cache/audio/example_audio.pt,cache/text/example_text.pt,ok,224,60,372
