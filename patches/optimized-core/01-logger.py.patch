@@ -1,0 +1,25 @@
+diff --git a/diffsynth/diffusion/logger.py b/diffsynth/diffusion/logger.py
+index 7c666ba..5fb34e4 100644
+--- a/diffsynth/diffusion/logger.py
++++ b/diffsynth/diffusion/logger.py
+@@ -90,8 +90,18 @@ class ModelLogger:
+     def on_epoch_end(self, accelerator: Accelerator, model: torch.nn.Module, epoch_id):
+         self.save_model(accelerator, model, f"epoch-{epoch_id}.safetensors")
+ 
+-    def on_training_end(self, accelerator: Accelerator, model: torch.nn.Module, save_steps=None):
+-        if save_steps is not None and self.num_steps % save_steps != 0:
++    def on_training_end(
++        self,
++        accelerator: Accelerator,
++        model: torch.nn.Module,
++        save_steps=None,
++        skip_final_save=False,
++    ):
++        if (
++            not skip_final_save
++            and save_steps is not None
++            and self.num_steps % save_steps != 0
++        ):
+             self.save_model(accelerator, model, f"step-{self.num_steps}.safetensors")
+         for logger in self.loggers:
+             logger.close()
