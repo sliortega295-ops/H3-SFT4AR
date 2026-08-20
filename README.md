@@ -9,7 +9,7 @@ git clone https://github.com/sliortega295-ops/H3-SFT4AR.git
 cd H3-SFT4AR
 cp config.example.env config.env
 # edit CSV_PATH and DIT_MODEL_PATH
-./run_ab.sh
+bash run_ab.sh
 ```
 
 That single command reconstructs **complete runnable source trees** under `.work/`, launches all requested modes, and writes a speedup table to `results/.../summary.md`.
