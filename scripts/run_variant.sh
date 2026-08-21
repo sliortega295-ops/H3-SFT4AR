@@ -35,7 +35,7 @@ DATA_ARGS=()
 case "${MODE}" in
   baseline)
     CODE_ROOT="${ROOT}/.work/baseline-measured"
-    ACCELERATE_CONFIG="${CODE_ROOT}/examples/minimax_h3/model_training/full/accelerate_config_zero3.yaml"
+    ACCELERATE_CONFIG="${BASELINE_ACCELERATE_CONFIG:-${CODE_ROOT}/examples/minimax_h3/model_training/full/accelerate_config_zero3.yaml}"
     ;;
   optimized-core)
     CODE_ROOT="${ROOT}/.work/optimized"
