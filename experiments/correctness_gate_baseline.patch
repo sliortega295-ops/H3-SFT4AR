@@ -40,9 +40,11 @@
 +    if numel <= sample_points:
 +        sampled = flat
 +    else:
-+        indices = torch.linspace(
-+            0, numel - 1, steps=sample_points, device=flat.device
-+        ).to(torch.long)
++        indices = (
++            torch.arange(sample_points, device=flat.device, dtype=torch.int64)
++            * (numel - 1)
++            // (sample_points - 1)
++        )
 +        sampled = flat.index_select(0, indices)
 +    sampled_cpu = sampled.float().cpu().contiguous()
 +    full_float = flat.float()
