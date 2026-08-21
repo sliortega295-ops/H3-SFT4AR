@@ -1,24 +1,11 @@
 --- a/diffsynth/diffusion/runner.py
 +++ b/diffsynth/diffusion/runner.py
-@@ -1,4 +1,5 @@
- import contextlib
+@@ -1,0 +2 @@
 +import hashlib
- import importlib
- import json
- import os
-@@ -120,7 +121,7 @@
- 
-     kwargs = {
-         "dataset": dataset,
+@@ -123 +124 @@
 -        "shuffle": True,
 +        "shuffle": not bool(getattr(args, "fixed_sample_schedule", False)),
-         "batch_size": 1,
-         "collate_fn": single_item_collate,
-         "num_workers": num_workers,
-@@ -132,6 +133,103 @@
-     return torch.utils.data.DataLoader(**kwargs)
- 
- 
+@@ -134,0 +136,97 @@
 +def _unwrap_diagnostic_module(model):
 +    candidate = model
 +    visited = set()
@@ -116,21 +103,9 @@
 +    return {"row_id": scalar(data["row_id"]), "chunk_id": scalar(data["chunk_id"])}
 +
 +
- def launch_training_task(
-     accelerator: Accelerator,
-     dataset: torch.utils.data.Dataset,
-@@ -192,6 +290,7 @@
-     enable_nvtx = bool(getattr(args, "enable_nvtx", False))
-     profile_cuda_capture = bool(getattr(args, "profile_cuda_capture", False))
-     skip_final_save = bool(getattr(args, "skip_final_save", False))
+@@ -194,0 +293 @@
 +    correctness_report = getattr(args, "correctness_report", None)
-     if benchmark_warmup_steps < 0 or benchmark_steps < 0:
-         raise ValueError("benchmark step counts must be non-negative.")
- 
-@@ -199,6 +298,15 @@
-     benchmark_start = None
-     benchmark_reported = False
-     stop_training = False
+@@ -201,0 +301,9 @@
 +    diagnostic_file = None
 +    diagnostic_parameters = None
 +    if correctness_report:
@@ -140,13 +115,7 @@
 +        diagnostic_parameters = _selected_trainable_parameters(model)
 +        if not diagnostic_parameters:
 +            raise RuntimeError("No trainable parameters are available for diagnostics.")
- 
-     for epoch_id in range(num_epochs):
-         data_iterator = iter(dataloader)
-@@ -235,18 +343,42 @@
-                             loss = model({}, inputs=data)
-                         else:
-                             loss = model(data)
+@@ -237,0 +346,8 @@
 +                    if diagnostic_file is not None:
 +                        diagnostic_record = {
 +                            "rank": accelerator.process_index,
@@ -155,10 +124,7 @@
 +                            "loss": float(loss.detach().float().cpu().item()),
 +                            "predictions": _prediction_signatures(model),
 +                        }
-                     with _nvtx_range(enable_nvtx, "H3/backward"):
-                         accelerator.backward(loss)
-                         if enable_model_cpu_offload:
-                             offload_manager.after_backward()
+@@ -241,0 +358,7 @@
 +                    if diagnostic_file is not None:
 +                        diagnostic_record["parameter_before"] = _parameter_signatures(
 +                            diagnostic_parameters, "parameter"
@@ -166,59 +132,36 @@
 +                        diagnostic_record["gradient"] = _parameter_signatures(
 +                            diagnostic_parameters, "gradient"
 +                        )
-                     with _nvtx_range(enable_nvtx, "H3/optimizer"):
-                         optimizer.step()
+@@ -243,0 +367,4 @@
 +                        if diagnostic_file is not None:
 +                            diagnostic_record["parameter_after"] = _parameter_signatures(
 +                                diagnostic_parameters, "parameter"
 +                            )
-                         scheduler.step()
-                         optimizer.zero_grad()
-                     with _nvtx_range(enable_nvtx, "H3/logging_checkpoint"):
-                         model_logger.on_step_end(
-                             accelerator, model, save_steps, loss=loss
-                         )
+@@ -249,0 +377,5 @@
 +                    if diagnostic_file is not None:
 +                        diagnostic_file.write(
 +                            json.dumps(diagnostic_record, sort_keys=True) + "\n"
 +                        )
 +                        diagnostic_file.flush()
- 
-             global_step += 1
-             progress.update(1)
-@@ -280,6 +412,8 @@
-         save_steps,
-         skip_final_save=skip_final_save,
-     )
+@@ -282,0 +415,2 @@
 +    if diagnostic_file is not None:
 +        diagnostic_file.close()
- 
- 
- def launch_data_process_task(
+--- a/diffsynth/diffusion/loss.py
++++ b/diffsynth/diffusion/loss.py
+@@ -66,0 +67 @@
++    diagnostics_callback = inputs.pop("diagnostics_callback", None)
+@@ -87,0 +89,2 @@
++    if diagnostics_callback is not None:
++        diagnostics_callback(noise_pred, noise_pred_audio)
 --- a/examples/minimax_h3/model_training/preprocessed_csv_dataset.py
 +++ b/examples/minimax_h3/model_training/preprocessed_csv_dataset.py
-@@ -50,6 +50,7 @@
-         audio_latents_column="h3_audio_latents",
-         text_emb_column="h3_text_emb",
-         status_column="h3_status",
+@@ -52,0 +53 @@
 +        fixed_chunk_seed=None,
-     ):
-         self.metadata_path = Path(metadata_path).expanduser().resolve()
-         self.base_path = (
-@@ -61,6 +62,9 @@
-         self.chunk_num_frames = int(chunk_num_frames)
-         self.video_chunk_latents = int(video_chunk_latents)
-         self.audio_chunk_latents = int(audio_chunk_latents)
+@@ -63,0 +65,3 @@
 +        self.fixed_chunk_seed = (
 +            None if fixed_chunk_seed is None else int(fixed_chunk_seed)
 +        )
-         if self.repeat < 1:
-             raise ValueError("dataset_repeat must be at least 1.")
-         if min(self.chunk_num_frames, self.video_chunk_latents, self.audio_chunk_latents) < 1:
-@@ -175,7 +179,14 @@
-                 f"Caches for CSV row {record['row_id']} are shorter than manifest metadata."
-             )
- 
+@@ -178 +182,8 @@
 -        chunk_id = int(torch.randint(actual_num_chunks, (1,)).item())
 +        if self.fixed_chunk_seed is None:
 +            chunk_id = int(torch.randint(actual_num_chunks, (1,)).item())
@@ -228,80 +171,32 @@
 +            chunk_id = int(
 +                torch.randint(actual_num_chunks, (1,), generator=generator).item()
 +            )
-         video_start = chunk_id * self.video_chunk_latents
-         audio_start = chunk_id * self.audio_chunk_latents
-         video_end = video_start + self.video_chunk_latents
-@@ -188,6 +199,7 @@
-             "text_token_tags": text_token_tags.reshape(-1).to(torch.long).contiguous(),
-             "has_reference": chunk_id > 0,
-             "chunk_id": chunk_id,
+@@ -190,0 +202 @@
 +            "row_id": record["row_id"],
-         }
-         if chunk_id > 0:
-             ref_video_start = video_start - self.video_chunk_latents
 --- a/examples/minimax_h3/model_training/train_preprocessed_csv.py
 +++ b/examples/minimax_h3/model_training/train_preprocessed_csv.py
-@@ -126,6 +126,8 @@
-         self.use_gradient_checkpointing_offload = use_gradient_checkpointing_offload
-         self.min_timestep_boundary = float(min_timestep_boundary)
-         self.max_timestep_boundary = float(max_timestep_boundary)
+@@ -128,0 +129,2 @@
 +        self.correctness_capture = os.environ.get("H3_CORRECTNESS_CAPTURE") == "1"
 +        self._last_prediction_tensors = None
-         if not 0 <= self.min_timestep_boundary < self.max_timestep_boundary <= 1:
-             raise ValueError("Timestep boundaries must satisfy 0 <= min < max <= 1.")
- 
-@@ -164,8 +166,7 @@
-             ref_blocks=ref_blocks,
-         )["packed"]
- 
+@@ -131,0 +134,5 @@
++    def _capture_predictions(self, *outputs):
++        self._last_prediction_tensors = tuple(
++            output.detach() for output in outputs if torch.is_tensor(output)
++        )
++
+@@ -167,2 +174 @@
 -        return FlowMatchSFTMiniMaxH3AudioVideoLoss(
 -            self.pipe,
 +        loss_kwargs = dict(
-             input_latents=video_latents,
-             audio_input_latents=audio_latents,
-             packed=packed,
-@@ -179,6 +180,26 @@
-             min_timestep_boundary=self.min_timestep_boundary,
-             max_timestep_boundary=self.max_timestep_boundary,
-         )
-+        if not self.correctness_capture:
-+            return FlowMatchSFTMiniMaxH3AudioVideoLoss(self.pipe, **loss_kwargs)
-+
-+        original_model_fn = self.pipe.model_fn
-+
-+        def capture_model_fn(*args, **kwargs):
-+            outputs = original_model_fn(*args, **kwargs)
-+            captured_outputs = (outputs,) if torch.is_tensor(outputs) else outputs
-+            self._last_prediction_tensors = tuple(
-+                output.detach()
-+                for output in captured_outputs
-+                if torch.is_tensor(output)
-+            )
-+            return outputs
-+
-+        self.pipe.model_fn = capture_model_fn
-+        try:
-+            return FlowMatchSFTMiniMaxH3AudioVideoLoss(self.pipe, **loss_kwargs)
-+        finally:
-+            self.pipe.model_fn = original_model_fn
- 
- 
- def build_parser():
-@@ -199,6 +220,9 @@
-     parser.add_argument("--enable_nvtx", action="store_true")
-     parser.add_argument("--profile_cuda_capture", action="store_true")
-     parser.add_argument("--skip_final_save", action="store_true")
+@@ -180,0 +187,3 @@
++            diagnostics_callback=(
++                self._capture_predictions if self.correctness_capture else None
++            ),
+@@ -181,0 +191 @@
++        return FlowMatchSFTMiniMaxH3AudioVideoLoss(self.pipe, **loss_kwargs)
+@@ -201,0 +212,3 @@
 +    parser.add_argument("--fixed_sample_schedule", action="store_true")
 +    parser.add_argument("--fixed_chunk_seed", type=int, default=None)
 +    parser.add_argument("--correctness_report", default=None)
-     parser.add_argument("--chunk_num_frames", type=int, default=DEFAULT_CHUNK_NUM_FRAMES)
-     parser.add_argument("--video_chunk_latents", type=int, default=DEFAULT_VIDEO_CHUNK_LATENTS)
-     parser.add_argument("--audio_chunk_latents", type=int, default=DEFAULT_AUDIO_CHUNK_LATENTS)
-@@ -249,6 +273,7 @@
-         audio_latents_column=args.audio_latents_column,
-         text_emb_column=args.text_emb_column,
-         status_column=args.status_column,
+@@ -251,0 +265 @@
 +        fixed_chunk_seed=args.fixed_chunk_seed,
-     )
-     model = MiniMaxH3PreprocessedTrainingModule(
-         model_paths=args.model_paths,
