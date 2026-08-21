@@ -5,15 +5,16 @@
 @@ -123 +124 @@
 -        "shuffle": True,
 +        "shuffle": not bool(getattr(args, "fixed_sample_schedule", False)),
-@@ -134,0 +136,97 @@
+@@ -134,0 +136,98 @@
 +def _unwrap_diagnostic_module(model):
 +    candidate = model
 +    visited = set()
-+    while not hasattr(candidate, "_last_prediction_tensors"):
-+        if id(candidate) in visited or not hasattr(candidate, "module"):
-+            break
++    while id(candidate) not in visited:
 +        visited.add(id(candidate))
-+        candidate = candidate.module
++        wrapped = getattr(candidate, "module", None)
++        if wrapped is None or wrapped is candidate:
++            break
++        candidate = wrapped
 +    return candidate
 +
 +
@@ -103,9 +104,9 @@
 +    return {"row_id": scalar(data["row_id"]), "chunk_id": scalar(data["chunk_id"])}
 +
 +
-@@ -197,0 +296 @@
+@@ -197,0 +297 @@
 +    correctness_report = getattr(args, "correctness_report", None)
-@@ -204,0 +304,9 @@
+@@ -204,0 +305,9 @@
 +    diagnostic_file = None
 +    diagnostic_parameters = None
 +    if correctness_report:
@@ -115,7 +116,7 @@
 +        diagnostic_parameters = _selected_trainable_parameters(model)
 +        if not diagnostic_parameters:
 +            raise RuntimeError("No trainable parameters are available for diagnostics.")
-@@ -240,0 +349,8 @@
+@@ -240,0 +350,8 @@
 +                    if diagnostic_file is not None:
 +                        diagnostic_record = {
 +                            "rank": accelerator.process_index,
@@ -124,7 +125,7 @@
 +                            "loss": float(loss.detach().float().cpu().item()),
 +                            "predictions": _prediction_signatures(model),
 +                        }
-@@ -244,0 +361,7 @@
+@@ -244,0 +362,7 @@
 +                    if diagnostic_file is not None:
 +                        diagnostic_record["parameter_before"] = _parameter_signatures(
 +                            diagnostic_parameters, "parameter"
@@ -132,18 +133,18 @@
 +                        diagnostic_record["gradient"] = _parameter_signatures(
 +                            diagnostic_parameters, "gradient"
 +                        )
-@@ -246,0 +370,4 @@
+@@ -246,0 +371,4 @@
 +                        if diagnostic_file is not None:
 +                            diagnostic_record["parameter_after"] = _parameter_signatures(
 +                                diagnostic_parameters, "parameter"
 +                            )
-@@ -252,0 +380,5 @@
+@@ -252,0 +381,5 @@
 +                    if diagnostic_file is not None:
 +                        diagnostic_file.write(
 +                            json.dumps(diagnostic_record, sort_keys=True) + "\n"
 +                        )
 +                        diagnostic_file.flush()
-@@ -285,0 +418,2 @@
+@@ -285,0 +419,2 @@
 +    if diagnostic_file is not None:
 +        diagnostic_file.close()
 --- a/diffsynth/diffusion/loss.py
