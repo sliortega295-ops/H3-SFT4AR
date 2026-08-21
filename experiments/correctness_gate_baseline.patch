@@ -15,7 +15,7 @@
          "batch_size": 1,
          "collate_fn": single_item_collate,
          "num_workers": num_workers,
-@@ -132,6 +133,101 @@
+@@ -132,6 +133,103 @@
      return torch.utils.data.DataLoader(**kwargs)
  
  
@@ -119,7 +119,7 @@
  def launch_training_task(
      accelerator: Accelerator,
      dataset: torch.utils.data.Dataset,
-@@ -192,6 +288,7 @@
+@@ -192,6 +290,7 @@
      enable_nvtx = bool(getattr(args, "enable_nvtx", False))
      profile_cuda_capture = bool(getattr(args, "profile_cuda_capture", False))
      skip_final_save = bool(getattr(args, "skip_final_save", False))
@@ -127,7 +127,7 @@
      if benchmark_warmup_steps < 0 or benchmark_steps < 0:
          raise ValueError("benchmark step counts must be non-negative.")
  
-@@ -199,6 +296,15 @@
+@@ -199,6 +298,15 @@
      benchmark_start = None
      benchmark_reported = False
      stop_training = False
@@ -143,7 +143,7 @@
  
      for epoch_id in range(num_epochs):
          data_iterator = iter(dataloader)
-@@ -235,18 +341,42 @@
+@@ -235,18 +343,42 @@
                              loss = model({}, inputs=data)
                          else:
                              loss = model(data)
@@ -186,7 +186,7 @@
  
              global_step += 1
              progress.update(1)
-@@ -280,6 +410,8 @@
+@@ -280,6 +412,8 @@
          save_steps,
          skip_final_save=skip_final_save,
      )
