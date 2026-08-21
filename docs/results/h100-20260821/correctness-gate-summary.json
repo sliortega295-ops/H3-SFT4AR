@@ -1,0 +1,25 @@
+{
+  "baseline_repeat": {
+    "pass": false,
+    "strict_failure_count": 108,
+    "fresh_processes": 2,
+    "optimizer_steps": 1,
+    "world_size": 8,
+    "sample_identities_equal": "8/8",
+    "loss_values_equal": "8/8",
+    "prediction_sampled_hashes_equal": "16/16",
+    "parameter_at_step_start_hashes_equal": "24/24",
+    "parameter_before_update_hashes_equal": "24/24",
+    "gradient_before_update_hashes_equal": "0/24",
+    "parameter_after_update_hashes_equal": "0/24",
+    "first_observed_divergence": "backward/gradient generation before optimizer update"
+  },
+  "optimized_zero": {
+    "status": "not_run",
+    "reason": "baseline self-repeat failed"
+  },
+  "nsight": {
+    "status": "not_run",
+    "reason": "correctness gate failed"
+  }
+}

@@ -1,6 +1,6 @@
 config.env
 .work/
-results/
+/results/
 models/
 *.nsys-rep
 *.qdrep
