@@ -8,7 +8,7 @@ LOCAL_UPSTREAM="${DIFFSYNTH_SOURCE:-}"
 
 if [[ "${FORCE_BOOTSTRAP:-0}" == 1 ]]; then rm -rf "${WORK}"; fi
 mkdir -p "${WORK}"
-if [[ -f "${WORK}/.bootstrap-v5-ok" ]]; then
+if [[ -f "${WORK}/.bootstrap-v6-ok" ]]; then
   echo "baseline=${WORK}/baseline"
   echo "baseline_measured=${WORK}/baseline-measured"
   echo "optimized=${WORK}/optimized"
@@ -37,8 +37,10 @@ cp -a "${ROOT}/baseline/DiffSynth-Studio/." "${WORK}/baseline/"
 cp -a "${WORK}/baseline" "${WORK}/baseline-measured"
 (
   cd "${WORK}/baseline-measured"
-  patch --dry-run -s -p1 < "${ROOT}/experiments/baseline_measurement.patch"
-  patch -s -p1 < "${ROOT}/experiments/baseline_measurement.patch"
+  git apply --recount --check "${ROOT}/experiments/baseline_measurement.patch"
+  git apply --recount "${ROOT}/experiments/baseline_measurement.patch"
+  git apply --recount --check "${ROOT}/experiments/correctness_gate_baseline.patch"
+  git apply --recount "${ROOT}/experiments/correctness_gate_baseline.patch"
 )
 
 # Optimized always starts from exactly the same baseline. Experiment-facing
@@ -51,12 +53,14 @@ fi
 (
   cd "${WORK}/optimized"
   for patch_file in "${ROOT}"/patches/optimized-core/*.patch; do
-    patch --dry-run -s -p1 < "${patch_file}"
-    patch -s -p1 < "${patch_file}"
+    git apply --recount --check "${patch_file}"
+    git apply --recount "${patch_file}"
   done
+  git apply --recount --check "${ROOT}/experiments/correctness_gate_optimized.patch"
+  git apply --recount "${ROOT}/experiments/correctness_gate_optimized.patch"
 )
 
-touch "${WORK}/.bootstrap-v5-ok"
+touch "${WORK}/.bootstrap-v6-ok"
 echo "baseline=${WORK}/baseline"
 echo "baseline_measured=${WORK}/baseline-measured"
 echo "optimized=${WORK}/optimized"

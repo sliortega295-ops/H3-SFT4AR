@@ -10,7 +10,7 @@ bash "${ROOT}/scripts/bootstrap.sh" >/dev/null
 SEED="${SEED:-20260820}"
 WARMUP_STEPS="${WARMUP_STEPS:-5}"
 MEASURE_STEPS="${MEASURE_STEPS:-30}"
-MAX_TRAIN_STEPS="$((WARMUP_STEPS + MEASURE_STEPS))"
+MAX_TRAIN_STEPS="${MAX_TRAIN_STEPS:-$((WARMUP_STEPS + MEASURE_STEPS))}"
 DATASET_REPEAT="${DATASET_REPEAT:-100}"
 LEARNING_RATE="${LEARNING_RATE:-1e-5}"
 DATA_WORKERS="${DATA_WORKERS:-2}"
@@ -84,6 +84,19 @@ PROFILE_ARGS=()
 [[ "${ENABLE_NVTX:-0}" != 1 ]] || PROFILE_ARGS+=(--enable_nvtx)
 [[ "${PROFILE_CUDA_CAPTURE:-0}" != 1 ]] || PROFILE_ARGS+=(--profile_cuda_capture)
 
+CORRECTNESS_ARGS=()
+if [[ "${CORRECTNESS_GATE:-0}" == 1 ]]; then
+  if (( WARMUP_STEPS != 0 || MEASURE_STEPS != 0 )); then
+    echo "Correctness gate requires WARMUP_STEPS=0 and MEASURE_STEPS=0." >&2
+    exit 2
+  fi
+  CORRECTNESS_ARGS=(
+    --fixed_sample_schedule
+    --fixed_chunk_seed "${SEED}"
+    --correctness_report "${OUTPUT_PATH}/correctness"
+  )
+fi
+
 CMD=(
   accelerate launch --config_file "${ACCELERATE_CONFIG}"
   examples/minimax_h3/model_training/train_preprocessed_csv.py
@@ -99,7 +112,7 @@ CMD=(
   --benchmark_warmup_steps "${WARMUP_STEPS}"
   --benchmark_steps "${MEASURE_STEPS}"
   --skip_final_save --task sft
-  "${DATA_ARGS[@]}" "${PROFILE_ARGS[@]}"
+  "${DATA_ARGS[@]}" "${PROFILE_ARGS[@]}" "${CORRECTNESS_ARGS[@]}"
 )
 
 {
@@ -109,12 +122,15 @@ CMD=(
   echo "seed=${SEED}"
   echo "warmup_steps=${WARMUP_STEPS}"
   echo "measure_steps=${MEASURE_STEPS}"
+  echo "max_train_steps=${MAX_TRAIN_STEPS}"
+  echo "correctness_gate=${CORRECTNESS_GATE:-0}"
   echo 'semantic_contract=full Ref2VA tokens; same target/ref tensors; same loss; full DiT; same optimizer/update order'
   printf 'command:'; printf ' %q' "${CMD[@]}"; printf '\n'
 } | tee "${OUTPUT_PATH}/run_contract.txt"
 
 cd "${CODE_ROOT}"
 export H3_EXPERIMENT_SEED="${SEED}"
+export H3_CORRECTNESS_CAPTURE="${CORRECTNESS_GATE:-0}"
 export PYTHONPATH="${ROOT}/scripts:${CODE_ROOT}:${PYTHONPATH:-}"
 export PYTHONUNBUFFERED=1
 if [[ -x /usr/bin/time ]]; then
