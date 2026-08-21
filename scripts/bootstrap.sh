@@ -45,6 +45,10 @@ patch --dry-run -s -p1 -d "${WORK}/baseline-measured" \
   < "${ROOT}/experiments/correctness_gate_baseline.patch"
 patch -s -p1 -d "${WORK}/baseline-measured" \
   < "${ROOT}/experiments/correctness_gate_baseline.patch"
+patch --dry-run -s -p1 -d "${WORK}/baseline-measured" \
+  < "${ROOT}/experiments/correctness_gate_deepspeed_split.patch"
+patch -s -p1 -d "${WORK}/baseline-measured" \
+  < "${ROOT}/experiments/correctness_gate_deepspeed_split.patch"
 
 # Optimized always starts from exactly the same baseline. Experiment-facing
 # examples/configs are stored as a readable overlay, while the five core runtime
@@ -61,6 +65,10 @@ patch --dry-run -s -p1 -d "${WORK}/optimized" \
   < "${ROOT}/experiments/correctness_gate_optimized.patch"
 patch -s -p1 -d "${WORK}/optimized" \
   < "${ROOT}/experiments/correctness_gate_optimized.patch"
+patch --dry-run -s -p1 -d "${WORK}/optimized" \
+  < "${ROOT}/experiments/correctness_gate_deepspeed_split.patch"
+patch -s -p1 -d "${WORK}/optimized" \
+  < "${ROOT}/experiments/correctness_gate_deepspeed_split.patch"
 
 touch "${WORK}/.bootstrap-v6-ok"
 echo "baseline=${WORK}/baseline"

@@ -6,3 +6,4 @@ models/
 *.qdrep
 __pycache__/
 *.pyc
+artifacts/

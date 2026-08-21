@@ -1,0 +1,57 @@
+--- a/diffsynth/diffusion/runner.py
++++ b/diffsynth/diffusion/runner.py
+@@ -339,6 +339,15 @@
+ 
+             with _nvtx_range(enable_nvtx, "H3/train_step"):
+                 with accelerator.accumulate(model):
++                    diagnostic_deepspeed = (
++                        diagnostic_file is not None
++                        and getattr(accelerator, "deepspeed_engine_wrapped", None)
++                        is not None
++                    )
++                    if diagnostic_file is not None:
++                        diagnostic_parameter_start = _parameter_signatures(
++                            diagnostic_parameters, "parameter"
++                        )
+                     with _nvtx_range(enable_nvtx, "H3/forward"):
+                         if dataset.load_from_cache:
+                             loss = model({}, inputs=data)
+@@ -351,22 +360,33 @@
+                             "sample": _sample_identity(data),
+                             "loss": float(loss.detach().float().cpu().item()),
+                             "predictions": _prediction_signatures(model),
++                            "parameter_at_step_start": diagnostic_parameter_start,
+                         }
+                     with _nvtx_range(enable_nvtx, "H3/backward"):
+-                        accelerator.backward(loss)
++                        if diagnostic_deepspeed:
++                            engine = accelerator.deepspeed_engine_wrapped.engine
++                            engine.set_gradient_accumulation_boundary(
++                                is_boundary=accelerator.sync_gradients
++                            )
++                            engine.backward(loss)
++                        else:
++                            accelerator.backward(loss)
+                         if enable_model_cpu_offload:
+                             offload_manager.after_backward()
+                     if diagnostic_file is not None:
+-                        diagnostic_record["parameter_before"] = _parameter_signatures(
++                        diagnostic_record["parameter_before_update"] = _parameter_signatures(
+                             diagnostic_parameters, "parameter"
+                         )
+-                        diagnostic_record["gradient"] = _parameter_signatures(
++                        diagnostic_record["gradient_before_update"] = _parameter_signatures(
+                             diagnostic_parameters, "gradient"
+                         )
+                     with _nvtx_range(enable_nvtx, "H3/optimizer"):
+-                        optimizer.step()
++                        if diagnostic_deepspeed and accelerator.sync_gradients:
++                            engine.step()
++                        elif not diagnostic_deepspeed:
++                            optimizer.step()
+                         if diagnostic_file is not None:
+-                            diagnostic_record["parameter_after"] = _parameter_signatures(
++                            diagnostic_record["parameter_after_update"] = _parameter_signatures(
+                                 diagnostic_parameters, "parameter"
+                             )
+                         scheduler.step()

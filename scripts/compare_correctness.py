@@ -72,7 +72,12 @@ def compare_runs(reference, candidate, label):
                 compare_signature(
                     left_sig, right_sig, f"{prefix}.prediction{index}", failures
                 )
-        for field in ("parameter_before", "gradient", "parameter_after"):
+        for field in (
+            "parameter_at_step_start",
+            "parameter_before_update",
+            "gradient_before_update",
+            "parameter_after_update",
+        ):
             if set(left[field]) != set(right[field]):
                 failures.append(f"{prefix}.{field}: selected parameter names differ")
                 continue
@@ -90,7 +95,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("baseline_a")
     parser.add_argument("baseline_b")
-    parser.add_argument("optimized_zero")
+    parser.add_argument("optimized_zero", nargs="?")
     parser.add_argument("--world-size", type=int, default=8)
     parser.add_argument("--steps", type=int, default=3)
     parser.add_argument("--output", required=True)
@@ -98,15 +103,22 @@ def main():
 
     baseline_a = load_records(args.baseline_a, args.world_size, args.steps)
     baseline_b = load_records(args.baseline_b, args.world_size, args.steps)
-    optimized_zero = load_records(args.optimized_zero, args.world_size, args.steps)
     baseline_repeat_failures = compare_runs(
         baseline_a, baseline_b, "baseline_a_vs_b"
     )
-    optimized_failures = compare_runs(
-        baseline_a, optimized_zero, "baseline_a_vs_optimized_zero"
+    optimized_failures = None
+    if args.optimized_zero is not None:
+        optimized_zero = load_records(
+            args.optimized_zero, args.world_size, args.steps
+        )
+        optimized_failures = compare_runs(
+            baseline_a, optimized_zero, "baseline_a_vs_optimized_zero"
+        )
+    gate_pass = not baseline_repeat_failures and (
+        optimized_failures is None or not optimized_failures
     )
     report = {
-        "gate_pass": not baseline_repeat_failures and not optimized_failures,
+        "gate_pass": gate_pass,
         "contract": {
             "world_size": args.world_size,
             "optimizer_steps": args.steps,
@@ -118,17 +130,22 @@ def main():
             "failure_count": len(baseline_repeat_failures),
             "failures": baseline_repeat_failures[:100],
         },
-        "optimized_zero": {
-            "pass": not optimized_failures,
-            "failure_count": len(optimized_failures),
-            "failures": optimized_failures[:100],
-        },
+        "optimized_zero": (
+            {"status": "not_run"}
+            if optimized_failures is None
+            else {
+                "status": "compared",
+                "pass": not optimized_failures,
+                "failure_count": len(optimized_failures),
+                "failures": optimized_failures[:100],
+            }
+        ),
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, sort_keys=True))
-    raise SystemExit(0 if report["gate_pass"] else 1)
+    raise SystemExit(0 if gate_pass else 1)
 
 
 if __name__ == "__main__":
