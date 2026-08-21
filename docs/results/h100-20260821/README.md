@@ -6,7 +6,9 @@ This snapshot contains seven complete 8-GPU H100 benchmark windows. It does not
 claim a speedup: the measured effects are small and change across trials.
 
 The second-trial `optimized-zero` run was intentionally stopped after 5 warm-up
-steps and 10 measured steps when the experiment owner requested shorter windows.
+steps and 12 measured steps when the experiment owner requested shorter windows.
+The stop request was issued after the 10th measured step; two more steps completed
+while the owned launcher and accelerator processes were being terminated.
 The current runner writes `benchmark.json` only after the configured window
 finishes, so that partial run is recorded as `PARTIAL_NOT_REPORTED` and is not
 used below.
