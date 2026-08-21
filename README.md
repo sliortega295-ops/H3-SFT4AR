@@ -39,7 +39,9 @@ All modes keep full Ref2VA/target tokens, attention semantics, loss, trainable p
 
 The reconstructed optimized tree has been checked against the previously validated optimized source for all 17 changed paths: all Git blob hashes match. The semantic test suite reports `7 passed`, and a tiny real H3 path (`dataset -> packing -> DiT -> loss -> backward`) is bitwise identical between baseline and optimized.
 
-A real 8-GPU MiniMax-H3 throughput run is intentionally not claimed here because this environment does not contain the H3 weights/latent dataset. Run the A/B command above on the target cluster.
+The target H100 cluster now has native 8-GPU MiniMax-H3 throughput windows and
+a baseline Nsight diagnosis. The current candidates do not show a stable
+speedup; see [`docs/results/h100-20260821/`](docs/results/h100-20260821/).
 
 ## Profile the bound
 
@@ -48,5 +50,10 @@ PROFILE_MODE=baseline bash scripts/profile_nsys.sh
 PROFILE_MODE=optimized-core bash scripts/profile_nsys.sh
 bash scripts/run_zero_sweep.sh
 ```
+
+If `nsys` is installed outside `PATH`, set `NSYS_BIN` to the executable. Older
+Nsight Systems releases that do not accept `nccl` as a trace domain can use
+`NSYS_TRACE=cuda,nvtx,osrt,cublas,cudnn`; NCCL device kernels remain visible in
+the CUDA trace.
 
 See `docs/SEMANTIC_CONTRACT.md` and `docs/EXPERIMENTS.md` for the measurement contract and experiment interpretation.

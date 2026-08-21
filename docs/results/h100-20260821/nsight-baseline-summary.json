@@ -1,0 +1,64 @@
+{
+  "capture": {
+    "mode": "baseline",
+    "world_size": 8,
+    "warmup_steps": 5,
+    "captured_steps": 2,
+    "nsight_systems_version": "2024.1.1.0",
+    "trace_domains": ["cuda", "nvtx", "osrt", "cublas", "cudnn"]
+  },
+  "nvtx_average_seconds_per_rank_step": {
+    "H3/train_step": 55.2803181332,
+    "H3/data_wait": 0.0328326543,
+    "H3/forward": 6.9321585065,
+    "H3/backward": 48.3477125746,
+    "DeepSpeedEngine.backward": 25.1311993126,
+    "DeepSpeedZeroOptimizer_Stage3.step": 23.2158507848
+  },
+  "cuda_kernel_aggregate": {
+    "nccl_allgather_ring_ll": {
+      "duration_ns": 217492162767,
+      "instances": 10848,
+      "reported_percent": 28.7
+    },
+    "flash_attention_backward": {
+      "duration_ns": 176918415587,
+      "instances": 1632,
+      "reported_percent": 23.4
+    },
+    "flash_attention_forward": {
+      "duration_ns": 119205845205,
+      "instances": 3232,
+      "reported_percent": 15.7
+    },
+    "nccl_reduce_scatter_bf16_ring_ll": {
+      "duration_ns": 72428388127,
+      "instances": 1232,
+      "reported_percent": 9.6
+    }
+  },
+  "cuda_memory_operations_aggregate": {
+    "host_to_device": {
+      "duration_ns": 20171192121,
+      "count": 9073,
+      "reported_percent": 61.2
+    },
+    "device_to_host": {
+      "duration_ns": 9348476967,
+      "count": 19104,
+      "reported_percent": 28.4
+    },
+    "device_to_device": {
+      "duration_ns": 3387785223,
+      "count": 20752,
+      "reported_percent": 10.3
+    }
+  },
+  "artifact": {
+    "report_bytes": 131115827,
+    "sqlite_bytes": 355188736,
+    "report_sha256": "3b871fdbed582a331b1bef9fc1a2f44bc8eb3d9e0628b9db08c87607dd361ae2",
+    "committed_to_git": false
+  },
+  "interpretation": "diagnostic only; percentages are aggregate durations and are not train-step wall-time shares"
+}

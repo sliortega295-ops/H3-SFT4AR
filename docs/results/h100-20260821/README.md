@@ -13,8 +13,10 @@ The current runner writes `benchmark.json` only after the configured window
 finishes, so that partial run is recorded as `PARTIAL_NOT_REPORTED` and is not
 used below.
 
-Nsight profiling was skipped because no repeatable positive throughput signal
-had been established.
+A baseline-only Nsight Systems capture was subsequently authorized to locate
+the acceleration bound despite the small BF16 self-repeat drift. It covers two
+steps after five warm-up steps and is diagnostic-only; see
+[`nsight-baseline.md`](nsight-baseline.md).
 
 ## Bound contract
 
@@ -70,7 +72,8 @@ estimate.
   checksums. This snapshot therefore does not claim GPU numerical equivalence.
 - Per-process CPU RSS and an automatically sampled GPU-memory peak were not
   captured by the committed runner.
-- No Nsight trace or performance-bound attribution is included.
+- The Nsight trace supports phase and aggregate kernel-duration attribution,
+  but it is not a throughput result and contains no hardware-counter claims.
 
 The raw machine-readable reports are stored in `trial-1/*/benchmark.json` and
 `trial-2/*/benchmark.json`.

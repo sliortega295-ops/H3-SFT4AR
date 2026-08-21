@@ -2,9 +2,11 @@
 
 ## Decision
 
-The exact baseline self-repeat gate failed. The optimized-zero correctness run
-and Nsight capture were therefore not run. This is a fail-closed correctness
-result, not a performance attribution.
+The exact baseline self-repeat gate failed, so no strict numerical-equivalence
+claim is made. For the acceleration investigation, the experiment owner judged
+the BF16 drift negligible enough to authorize a baseline-only diagnostic
+timeline. Nsight was therefore run without treating the exact gate as passed;
+see [`nsight-baseline.md`](nsight-baseline.md).
 
 ## Three-step baseline repeat (v4)
 
@@ -87,6 +89,6 @@ source-backed hypothesis is that the full 50-block DiT forward/backward,
 checkpoint recomputation, and ZeRO-3 communication/update path dominate the
 step, but that attribution requires a valid baseline-only timeline.
 
-Nsight remains blocked until the baseline correctness policy is resolved. A
-timeline, if later authorized, is diagnostic-only and must not replace the
-native throughput numbers.
+The authorized baseline timeline localizes the dominant phase to
+backward/ZeRO-3 update and shows substantial NCCL and attention-kernel time. It
+is diagnostic-only and does not replace the native throughput numbers.

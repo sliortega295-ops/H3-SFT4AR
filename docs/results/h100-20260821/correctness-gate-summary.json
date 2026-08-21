@@ -19,7 +19,12 @@
     "reason": "baseline self-repeat failed"
   },
   "nsight": {
-    "status": "not_run",
-    "reason": "correctness gate failed"
+    "status": "completed_diagnostic",
+    "mode": "baseline",
+    "warmup_steps": 5,
+    "captured_steps": 2,
+    "average_seconds_per_step": 55.2803181332,
+    "report_sha256": "3b871fdbed582a331b1bef9fc1a2f44bc8eb3d9e0628b9db08c87607dd361ae2",
+    "interpretation": "diagnostic only; exact baseline self-repeat gate remains failed"
   }
 }
