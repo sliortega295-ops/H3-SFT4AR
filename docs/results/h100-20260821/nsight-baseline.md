@@ -97,6 +97,11 @@ they are not evidence of an input-pipeline bottleneck.
 Every candidate still needs a short native 5-10 step A/B confirmation after
 warm-up. Nsight is used to choose the candidate, not to claim its speedup.
 
+The first follow-up is documented in
+[`hybrid-optimizer-short.md`](hybrid-optimizer-short.md). A memory-bounded 50%
+optimizer-offload candidate completed a native 5-step window at 43.2914
+seconds/step, versus 55.0566 and 55.5311 seconds/step for the prior baselines.
+
 ## Artifact integrity
 
 - Report: `results/nsys-baseline-20260821-short-v1/baseline.nsys-rep`

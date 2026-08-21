@@ -40,8 +40,10 @@ All modes keep full Ref2VA/target tokens, attention semantics, loss, trainable p
 The reconstructed optimized tree has been checked against the previously validated optimized source for all 17 changed paths: all Git blob hashes match. The semantic test suite reports `7 passed`, and a tiny real H3 path (`dataset -> packing -> DiT -> loss -> backward`) is bitwise identical between baseline and optimized.
 
 The target H100 cluster now has native 8-GPU MiniMax-H3 throughput windows and
-a baseline Nsight diagnosis. The current candidates do not show a stable
-speedup; see [`docs/results/h100-20260821/`](docs/results/h100-20260821/).
+a baseline Nsight diagnosis. The initial candidates did not show a stable
+speedup. A later Nsight-guided hybrid-optimizer short window produced a
+preliminary 1.27-1.28x throughput signal with very little HBM headroom; see
+[`docs/results/h100-20260821/`](docs/results/h100-20260821/).
 
 ## Profile the bound
 

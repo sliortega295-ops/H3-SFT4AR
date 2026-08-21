@@ -1,0 +1,9 @@
+{
+  "measured_steps_per_rank": 5,
+  "world_size": 8,
+  "elapsed_seconds_mean_rank": 216.4571435220132,
+  "elapsed_seconds_max_rank": 216.4571528469678,
+  "steps_per_second": 0.023099259757587823,
+  "samples_per_second_global": 0.18479407806070258,
+  "measurement_contract": "One synchronization before and after the complete window; no per-phase synchronization is inserted. Includes data wait, forward, backward, optimizer, scheduler, zero_grad, and logging for each step."
+}

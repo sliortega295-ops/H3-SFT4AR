@@ -2,8 +2,11 @@
 
 ## Status
 
-This snapshot contains seven complete 8-GPU H100 benchmark windows. It does not
-claim a speedup: the measured effects are small and change across trials.
+This snapshot contains seven complete 30-step 8-GPU H100 benchmark windows.
+Those initial variants do not establish a speedup: their measured effects are
+small and change across trials. A later Nsight-guided 5-step window found a
+large preliminary hybrid-optimizer signal; it is reported separately because
+its window is shorter and its HBM margin is very small.
 
 The second-trial `optimized-zero` run was intentionally stopped after 5 warm-up
 steps and 12 measured steps when the experiment owner requested shorter windows.
@@ -50,6 +53,25 @@ from -1.38% in trial 1 to +0.73% in trial 2. These data therefore do not support
 a stable acceleration claim. The observed differences are also small enough
 that additional short repetitions should report dispersion, not only a point
 estimate.
+
+## Nsight-guided short follow-up
+
+The baseline profile localized 87.46% of the step to backward/ZeRO update and
+showed 38.3% of aggregate GPU-kernel duration in NCCL AllGather and
+ReduceScatter. A memory-bounded hybrid ZeRO-3 candidate then completed five
+warm-up and five measured steps:
+
+| mode | measured steps | seconds / step | global samples / second | throughput vs baseline trial 1 | throughput vs baseline trial 2 |
+|---|---:|---:|---:|---:|---:|
+| baseline + 50% optimizer offload + 50M buckets | 5 | 43.2914 | 0.184794 | 1.2718x | 1.2827x |
+
+This corresponds to 21.37%-22.04% lower step time, or 27.18%-28.27% higher
+throughput, than the two 30-step baselines. It is a strong acceleration signal,
+not yet a final production claim: the current window is short, no fresh paired
+baseline was run immediately before it, two allocator cache flushes occurred,
+and sampled HBM use reached 80,991 of 81,559 MiB. See
+[`hybrid-optimizer-short.md`](hybrid-optimizer-short.md) for the exact contract
+and failed feasibility gates.
 
 ## Preparation and validation performed on the H100 node
 
