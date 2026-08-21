@@ -8,7 +8,7 @@ LOCAL_UPSTREAM="${DIFFSYNTH_SOURCE:-}"
 
 if [[ "${FORCE_BOOTSTRAP:-0}" == 1 ]]; then rm -rf "${WORK}"; fi
 mkdir -p "${WORK}"
-if [[ -f "${WORK}/.bootstrap-v6-ok" ]]; then
+if [[ -f "${WORK}/.bootstrap-v7-ok" ]]; then
   echo "baseline=${WORK}/baseline"
   echo "baseline_measured=${WORK}/baseline-measured"
   echo "optimized=${WORK}/optimized"
@@ -70,7 +70,7 @@ patch --dry-run -s -p1 -d "${WORK}/optimized" \
 patch -s -p1 -d "${WORK}/optimized" \
   < "${ROOT}/experiments/correctness_gate_deepspeed_split.patch"
 
-touch "${WORK}/.bootstrap-v6-ok"
+touch "${WORK}/.bootstrap-v7-ok"
 echo "baseline=${WORK}/baseline"
 echo "baseline_measured=${WORK}/baseline-measured"
 echo "optimized=${WORK}/optimized"
