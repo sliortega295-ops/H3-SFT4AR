@@ -33,15 +33,18 @@ fi
 # Reconstruct the user's uploaded Ref2VA baseline on the exact pinned upstream.
 cp -a "${ROOT}/baseline/DiffSynth-Studio/." "${WORK}/baseline/"
 
-# Baseline measurement tree = baseline + timing-only instrumentation.
+# Baseline measurement tree = baseline + timing-only instrumentation. Apply
+# from the repository root with an explicit generated-tree prefix; otherwise
+# git apply resolves paths against the containing worktree instead of $PWD.
 cp -a "${WORK}/baseline" "${WORK}/baseline-measured"
-(
-  cd "${WORK}/baseline-measured"
-  git apply --recount --check "${ROOT}/experiments/baseline_measurement.patch"
-  git apply --recount "${ROOT}/experiments/baseline_measurement.patch"
-  git apply --recount --check "${ROOT}/experiments/correctness_gate_baseline.patch"
-  git apply --recount "${ROOT}/experiments/correctness_gate_baseline.patch"
-)
+git -C "${ROOT}" apply --directory=.work/baseline-measured --recount --check \
+  "${ROOT}/experiments/baseline_measurement.patch"
+git -C "${ROOT}" apply --directory=.work/baseline-measured --recount \
+  "${ROOT}/experiments/baseline_measurement.patch"
+git -C "${ROOT}" apply --directory=.work/baseline-measured --recount --check \
+  "${ROOT}/experiments/correctness_gate_baseline.patch"
+git -C "${ROOT}" apply --directory=.work/baseline-measured --recount \
+  "${ROOT}/experiments/correctness_gate_baseline.patch"
 
 # Optimized always starts from exactly the same baseline. Experiment-facing
 # examples/configs are stored as a readable overlay, while the five core runtime
@@ -50,15 +53,14 @@ cp -a "${WORK}/baseline" "${WORK}/optimized"
 if [[ -d "${ROOT}/optimized/DiffSynth-Studio/examples" ]]; then
   cp -a "${ROOT}/optimized/DiffSynth-Studio/examples/." "${WORK}/optimized/examples/"
 fi
-(
-  cd "${WORK}/optimized"
-  for patch_file in "${ROOT}"/patches/optimized-core/*.patch; do
-    git apply --recount --check "${patch_file}"
-    git apply --recount "${patch_file}"
-  done
-  git apply --recount --check "${ROOT}/experiments/correctness_gate_optimized.patch"
-  git apply --recount "${ROOT}/experiments/correctness_gate_optimized.patch"
-)
+for patch_file in "${ROOT}"/patches/optimized-core/*.patch; do
+  git -C "${ROOT}" apply --directory=.work/optimized --recount --check "${patch_file}"
+  git -C "${ROOT}" apply --directory=.work/optimized --recount "${patch_file}"
+done
+git -C "${ROOT}" apply --directory=.work/optimized --recount --check \
+  "${ROOT}/experiments/correctness_gate_optimized.patch"
+git -C "${ROOT}" apply --directory=.work/optimized --recount \
+  "${ROOT}/experiments/correctness_gate_optimized.patch"
 
 touch "${WORK}/.bootstrap-v6-ok"
 echo "baseline=${WORK}/baseline"
