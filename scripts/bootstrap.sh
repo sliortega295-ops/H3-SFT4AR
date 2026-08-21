@@ -41,10 +41,10 @@ git -C "${ROOT}" apply --directory=.work/baseline-measured --recount --check \
   "${ROOT}/experiments/baseline_measurement.patch"
 git -C "${ROOT}" apply --directory=.work/baseline-measured --recount \
   "${ROOT}/experiments/baseline_measurement.patch"
-git -C "${ROOT}" apply --directory=.work/baseline-measured --recount --check \
-  "${ROOT}/experiments/correctness_gate_baseline.patch"
-git -C "${ROOT}" apply --directory=.work/baseline-measured --recount \
-  "${ROOT}/experiments/correctness_gate_baseline.patch"
+patch --dry-run -s -p1 -d "${WORK}/baseline-measured" \
+  < "${ROOT}/experiments/correctness_gate_baseline.patch"
+patch -s -p1 -d "${WORK}/baseline-measured" \
+  < "${ROOT}/experiments/correctness_gate_baseline.patch"
 
 # Optimized always starts from exactly the same baseline. Experiment-facing
 # examples/configs are stored as a readable overlay, while the five core runtime
@@ -57,10 +57,10 @@ for patch_file in "${ROOT}"/patches/optimized-core/*.patch; do
   git -C "${ROOT}" apply --directory=.work/optimized --recount --check "${patch_file}"
   git -C "${ROOT}" apply --directory=.work/optimized --recount "${patch_file}"
 done
-git -C "${ROOT}" apply --directory=.work/optimized --recount --check \
-  "${ROOT}/experiments/correctness_gate_optimized.patch"
-git -C "${ROOT}" apply --directory=.work/optimized --recount \
-  "${ROOT}/experiments/correctness_gate_optimized.patch"
+patch --dry-run -s -p1 -d "${WORK}/optimized" \
+  < "${ROOT}/experiments/correctness_gate_optimized.patch"
+patch -s -p1 -d "${WORK}/optimized" \
+  < "${ROOT}/experiments/correctness_gate_optimized.patch"
 
 touch "${WORK}/.bootstrap-v6-ok"
 echo "baseline=${WORK}/baseline"
